@@ -37,6 +37,24 @@
             <plugins>
                 <plugin>
                     <groupId>org.apache.maven.plugins</groupId>
+                    <artifactId>maven-jar-plugin</artifactId>
+                    <version>3.2.0</version>
+                    <configuration>
+                        <archive>
+                            <manifest>
+                                <addClasspath>true</addClasspath>
+                                <classpathPrefix>lib/</classpathPrefix>
+                                <mainClass>ru.list.surkovr.chatgpt_bot.ChatGPTBot</mainClass>
+                            </manifest>
+                        </archive>
+                        <includes>
+                            <include>**/*.properties</include>
+                        </includes>
+                    </configuration>
+                </plugin>
+
+                <plugin>
+                    <groupId>org.apache.maven.plugins</groupId>
                     <artifactId>maven-assembly-plugin</artifactId>
                     <executions>
                         <execution>
@@ -48,7 +66,7 @@
                                 <archive>
                                     <manifest>
                                         <mainClass>
-                                            ru.list.surkovr.chatgpt_bot.ChatGPTBot
+                                            ru.list.surkovr.chatgptbot.ChatGPTBot
                                         </mainClass>
                                     </manifest>
                                 </archive>

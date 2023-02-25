@@ -1,4 +1,4 @@
-package ru.list.surkovr.chatgpt_bot;
+package ru.list.surkovr.chatgptbot;
 
 import com.theokanning.openai.completion.CompletionRequest;
 import com.theokanning.openai.service.OpenAiService;
@@ -13,7 +13,6 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.time.Duration;
 import java.util.Properties;
-import java.util.ResourceBundle;
 import java.util.logging.Logger;
 
 import static java.lang.String.format;
