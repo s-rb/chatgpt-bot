@@ -37,6 +37,12 @@
                 <artifactId>maven-compiler-plugin</artifactId>
                 <version>${maven-compiler-plugin.version}</version>
                 <configuration>
+                    <archive>
+                        <manifest>
+                            <addClasspath>true</addClasspath>
+                            <mainClass>ru.list.surkovr.chatgpt_bot.ChatGPTBot</mainClass>
+                        </manifest>
+                    </archive>
                     <source>${java.version}</source>
                     <target>${java.version}</target>
                     <excludes>
