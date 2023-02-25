@@ -50,9 +50,9 @@ public class ChatGPTBot extends TelegramLongPollingBot {
         String telegramBotToken = props.getProperty("telegramBotToken");
         String telegramBotName = props.getProperty("telegramBotName");
         String openaiModelId = props.getProperty("openaiModelId");
-        Long maxTokens = Long.parseLong(props.getProperty("maxTokens"));
+        Long maxTokens = (long) Integer.parseInt(props.getProperty("maxTokens"));
         Integer openApiTimeoutS = Integer.parseInt(props.getProperty("openApiTimeoutS"));
-        Long adminChatId = Long.parseLong(props.getProperty("adminChatId"));
+        Long adminChatId = (long) Integer.parseInt(props.getProperty("adminChatId"));
 
         ChatGPTBot bot = new ChatGPTBot(openaiApiKey, telegramBotToken, telegramBotName, openaiModelId, maxTokens,
                 adminChatId, openApiTimeoutS);
