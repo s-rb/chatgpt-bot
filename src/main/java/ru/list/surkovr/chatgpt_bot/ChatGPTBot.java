@@ -9,7 +9,10 @@ import org.telegram.telegrambots.meta.api.objects.Update;
 import org.telegram.telegrambots.meta.exceptions.TelegramApiException;
 import org.telegram.telegrambots.updatesreceivers.DefaultBotSession;
 
+import java.io.IOException;
+import java.io.InputStream;
 import java.time.Duration;
+import java.util.Properties;
 import java.util.ResourceBundle;
 import java.util.logging.Logger;
 
@@ -36,14 +39,20 @@ public class ChatGPTBot extends TelegramLongPollingBot {
     }
 
     public static void main(String[] args) throws TelegramApiException {
-        ResourceBundle rb = ResourceBundle.getBundle("application");
-        String openaiApiKey = rb.getString("openaiApiKey");
-        String telegramBotToken = rb.getString("telegramBotToken");
-        String telegramBotName = rb.getString("telegramBotName");
-        String openaiModelId = rb.getString("openaiModelId");
-        Long maxTokens = Long.parseLong(rb.getString("maxTokens"));
-        Integer openApiTimeoutS = Integer.parseInt(rb.getString("openApiTimeoutS"));
-        Long adminChatId = Long.parseLong(rb.getString("adminChatId"));
+        Properties props = new Properties();
+        try (InputStream is = ChatGPTBot.class.getClassLoader().getResourceAsStream("application.properties")) {
+            props.load(is);
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
+
+        String openaiApiKey = props.getProperty("openaiApiKey");
+        String telegramBotToken = props.getProperty("telegramBotToken");
+        String telegramBotName = props.getProperty("telegramBotName");
+        String openaiModelId = props.getProperty("openaiModelId");
+        Long maxTokens = Long.parseLong(props.getProperty("maxTokens"));
+        Integer openApiTimeoutS = Integer.parseInt(props.getProperty("openApiTimeoutS"));
+        Long adminChatId = Long.parseLong(props.getProperty("adminChatId"));
 
         ChatGPTBot bot = new ChatGPTBot(openaiApiKey, telegramBotToken, telegramBotName, openaiModelId, maxTokens,
                 adminChatId, openApiTimeoutS);
