@@ -18,7 +18,6 @@ import java.io.InputStream;
 import java.time.Duration;
 import java.util.Arrays;
 import java.util.List;
-import java.util.Optional;
 import java.util.Properties;
 import java.util.logging.Logger;
 
@@ -88,43 +87,44 @@ public class ChatGPTBot extends TelegramLongPollingBot {
 
             if (update.hasCallbackQuery()) {
                 onCallbackQueryReceived(update.getCallbackQuery());
-                return;
-            }
-
-            String messageText = update.getMessage().getText();
-            if (isExcludedCommand(messageText)) {
-                log.warning(format("Update has unprocessable message: [%s]", messageText));
-                return;
-            }
-
-            User from = update.getMessage().getFrom();
-            Long userId = from.getId();
-            Long chatId = update.getMessage().getChatId();
-            String chatIdString = chatId.toString();
-            log.info(format("Received message from user with ID %s in chat %s : %s", userId, chatIdString, messageText));
-
-            if (isAdmin(chatId) || isApproved(from)) {
-                CompletionRequest request = CompletionRequest.builder()
-                        .prompt(messageText)
-                        .model(openaiModelId)
-                        .maxTokens(maxTokens.intValue())
-                        .build();
-
-                var response = openaiService.createCompletion(request);
-
-                String generatedText = response.getChoices().get(0).getText();
-                log.info(format("Sending response to user with ID %s in chat %s : %s", userId, chatIdString, generatedText));
-
-                SendMessage sendMessage = new SendMessage(chatId.toString(), generatedText);
-                execute(sendMessage);
-
             } else {
-                sendMessageToUser(userId, "Вам это действие недоступно", null);
-                askForAccessApproval(from);
+                onTextMessageReceived(update);
             }
         } catch (Exception e) {
             log.warning(e.getMessage());
             e.printStackTrace();
+        }
+    }
+
+    private void onTextMessageReceived(Update update) {
+        String messageText = update.getMessage().getText();
+        if (isExcludedCommand(messageText)) {
+            log.info(format("Update has unprocessable message: [%s]", messageText));
+            return;
+        }
+
+        User from = update.getMessage().getFrom();
+        Long userId = from.getId();
+        Long chatId = update.getMessage().getChatId();
+        String chatIdString = chatId.toString();
+        log.info(format("Received message from user with ID %s in chat %s : %s", userId, chatIdString, messageText));
+
+        if (isAdmin(chatId) || isApproved(from)) {
+            CompletionRequest request = CompletionRequest.builder()
+                    .prompt(messageText)
+                    .model(openaiModelId)
+                    .maxTokens(maxTokens.intValue())
+                    .build();
+
+            var response = openaiService.createCompletion(request);
+
+            String generatedText = response.getChoices().get(0).getText();
+            log.info(format("Sending response to user with ID %s in chat %s : %s", userId, chatIdString, generatedText));
+
+            sendMessageToUser(chatId, generatedText, null);
+        } else {
+            sendMessageToUser(userId, "Вам это действие недоступно", null);
+            askForAccessApproval(from);
         }
     }
 
@@ -150,6 +150,16 @@ public class ChatGPTBot extends TelegramLongPollingBot {
         sendMessageToUser(user.getId(), messageText, markup);
     }
 
+    private void askAdminForAccessConfirmation(ru.list.surkovr.chatgptbot.User user) {
+        String message = "Вы хотите дать доступ пользователю " + "[username=" + user.getUsername()
+                + " userId=" + user.getUserId()
+                + " firstName=" + user.getFirstName() + " lastName=" + user.getLastName() + "]?";
+        InlineKeyboardMarkup markup = new InlineKeyboardMarkup(List.of(List.of(
+                getInlineButton("Подтвердить", "accessApproveConfirmation:" + user.getUserId()),
+                getInlineButton("Отклонить", "accessDeclineConfirmation:" + user.getUserId()))));
+        sendMessageToAdmin(message, markup);
+    }
+
     private InlineKeyboardButton getInlineButton(String text, String callbackData) {
         InlineKeyboardButton button = new InlineKeyboardButton(text);
         button.setCallbackData(callbackData);
@@ -160,45 +170,35 @@ public class ChatGPTBot extends TelegramLongPollingBot {
         String[] data = callbackQuery.getData().split(":");
         long userId = Long.parseLong(data[1]);
         User tgUser = callbackQuery.getFrom();
-        if (data[0].equals("accessApproval")) {
-            ru.list.surkovr.chatgptbot.User user = userService.get(userId);
-            if (user != null) {
-                user = userService.updateStatus(userId, UserStatus.PENDING);
-            } else {
-                user = userService.createUser(tgUser);
+        switch (data[0]) {
+            case "accessApproval" -> {
+                ru.list.surkovr.chatgptbot.User user = userService.updateStatus(userId, UserStatus.PENDING);
+                askAdminForAccessConfirmation(user);
             }
-
-            sendMessageToAdmin("Вы хотите дать доступ пользователю " + "[username=" + user.getUsername()
-                            + " userId=" + user.getUserId()
-                            + " firstName=" + user.getFirstName() + " lastName=" + user.getLastName() + "]?",
-                    new InlineKeyboardMarkup(List.of(List.of(
-                            getInlineButton("Подтвердить", "accessApproveConfirmation:" + user.getUserId()),
-                            getInlineButton("Отклонить", "accessDeclineConfirmation:" + user.getUserId())))));
-        } else if (data[0].equals("accessDecline")) {
-            ru.list.surkovr.chatgptbot.User user = userService.get(userId);
-            if (user != null) {
-                user = userService.updateStatus(userId, UserStatus.PENDING);
-            } else {
-                user = userService.createUser(tgUser);
+            case "accessDecline" -> {
+                ru.list.surkovr.chatgptbot.User user = userService.updateStatus(userId, UserStatus.PENDING);
+                sendMessageToUser(callbackQuery.getMessage().getChatId(), "Нет доступа", null);
             }
-            sendMessageToUser(callbackQuery.getMessage().getChatId(), "Нет доступа", null);
-        } else if (data[0].equals("accessApproveConfirmation")) {
-            long approvedUserId = Long.parseLong(data[1]);
-            ru.list.surkovr.chatgptbot.User user = userService.updateStatus(userId, UserStatus.APPROVED);
-            sendMessageToUser(approvedUserId, "Вам предоставлен доступ", null);
-            sendMessageToAdmin("Вы одобрили запрос на доступ для " + user.getFirstName() + " " +
-                    user.getLastName() + " (" + user.getUsername() + ")", null);
-        } else if (data[0].equals("accessDeclineConfirmation")) {
-            long declinedUserId = Long.parseLong(data[1]);
-            ru.list.surkovr.chatgptbot.User user = userService.updateStatus(userId, UserStatus.DECLINED);
-            sendMessageToUser(declinedUserId, "Вам отказано в доступе", null);
-            sendMessageToAdmin("Вы отказали в доступе для " + user.getFirstName() + " " +
-                    user.getLastName() + " (" + user.getUsername() + ")", null);
-        } else {
-            String errMsg = format("Получена неизвестная, необрабатываемая команда: %s, chatId: %s, userId: %s",
-                    Arrays.toString(data), callbackQuery.getMessage().getChatId(), tgUser.getId());
-            log.warning(errMsg);
-            sendMessageToAdmin(errMsg, null);
+            case "accessApproveConfirmation" -> {
+                long approvedUserId = Long.parseLong(data[1]);
+                ru.list.surkovr.chatgptbot.User user = userService.updateStatus(userId, UserStatus.APPROVED);
+                sendMessageToUser(approvedUserId, "Вам предоставлен доступ", null);
+                sendMessageToAdmin("Вы одобрили запрос на доступ для " + user.getFirstName() + " " +
+                        user.getLastName() + " (" + user.getUsername() + ")", null);
+            }
+            case "accessDeclineConfirmation" -> {
+                long declinedUserId = Long.parseLong(data[1]);
+                ru.list.surkovr.chatgptbot.User user = userService.updateStatus(userId, UserStatus.DECLINED);
+                sendMessageToUser(declinedUserId, "Вам отказано в доступе", null);
+                sendMessageToAdmin("Вы отказали в доступе для " + user.getFirstName() + " " +
+                        user.getLastName() + " (" + user.getUsername() + ")", null);
+            }
+            default -> {
+                String errMsg = format("Получена неизвестная, необрабатываемая команда: %s, chatId: %s, userId: %s",
+                        Arrays.toString(data), callbackQuery.getMessage().getChatId(), tgUser.getId());
+                log.warning(errMsg);
+                sendMessageToAdmin(errMsg, null);
+            }
         }
     }
 
@@ -215,13 +215,7 @@ public class ChatGPTBot extends TelegramLongPollingBot {
 
     // Метод для отправки сообщения админу
     private void sendMessageToAdmin(String message, InlineKeyboardMarkup inlineKeyboardMarkup) {
-        SendMessage sendMessage = new SendMessage(String.valueOf(adminChatId), message);
-        if (inlineKeyboardMarkup != null) sendMessage.setReplyMarkup(inlineKeyboardMarkup);
-        try {
-            execute(sendMessage);
-        } catch (TelegramApiException e) {
-            e.printStackTrace();
-        }
+        sendMessageToUser(adminChatId, message, inlineKeyboardMarkup);
     }
 }
 
