@@ -4,6 +4,7 @@ build/
 !gradle/wrapper/gradle-wrapper.jar
 !**/src/main/**/build/
 !**/src/test/**/build/
+target
 
 ### STS ###
 .apt_generated
@@ -59,3 +60,5 @@ out/
 
 # virtual machine crash logs, see http://www.java.com/en/download/help/error_hotspot.xml
 hs_err_pid*
+/usersDb.txt
+/dependency-reduced-pom.xml

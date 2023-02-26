@@ -63,11 +63,13 @@ public class UserService {
         saveToFile();
     }
 
-    private User createUser(org.telegram.telegrambots.meta.api.objects.User user) {
+    public User createUser(org.telegram.telegrambots.meta.api.objects.User user) {
         User u = new User(user.getId());
         u.setUsername(user.getUserName());
         u.setFirstName(user.getFirstName());
         u.setLastName(user.getLastName());
+        u.setStatus(UserStatus.PENDING);
+        users.put(user.getId(), u);
         return u;
     }
 
@@ -80,6 +82,18 @@ public class UserService {
 
     private User createUser(long userId) {
         return new User(userId);
+    }
+
+    public User get(long userId) {
+        return users.get(userId);
+    }
+
+    public User updateStatus(long userId, UserStatus status) {
+        User user = users.getOrDefault(userId, createUser(userId));
+        user.setStatus(status);
+        users.put(userId, user);
+        saveToFile();
+        return user;
     }
 }
 

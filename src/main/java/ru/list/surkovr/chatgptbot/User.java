@@ -1,6 +1,8 @@
 package ru.list.surkovr.chatgptbot;
 
-public class User {
+import java.io.Serializable;
+
+public class User implements Serializable {
     private long userId;
     private String firstName;
     private String lastName;
