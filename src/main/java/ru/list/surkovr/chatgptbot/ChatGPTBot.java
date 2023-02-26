@@ -6,6 +6,7 @@ import org.telegram.telegrambots.bots.TelegramLongPollingBot;
 import org.telegram.telegrambots.meta.TelegramBotsApi;
 import org.telegram.telegrambots.meta.api.methods.send.SendMessage;
 import org.telegram.telegrambots.meta.api.objects.Update;
+import org.telegram.telegrambots.meta.api.objects.User;
 import org.telegram.telegrambots.meta.exceptions.TelegramApiException;
 import org.telegram.telegrambots.updatesreceivers.DefaultBotSession;
 
@@ -25,11 +26,13 @@ public class ChatGPTBot extends TelegramLongPollingBot {
     private final Long maxTokens;
     private final Long adminChatId;
 
+    private final UserService userService;
     private final OpenAiService openaiService;
 
     public ChatGPTBot(String openaiApiKey, String telegramBotToken, String telegramBotName, String openaiModelId,
-                      Long maxTokens, Long adminChatId, Integer openApiTimeoutS) {
+                      Long maxTokens, String usersFile, Long adminChatId, Integer openApiTimeoutS) {
         super(telegramBotToken);
+        this.userService = new UserService(usersFile);
         this.openaiService = new OpenAiService(openaiApiKey, Duration.ofSeconds(openApiTimeoutS));
         this.telegramBotName = telegramBotName;
         this.openaiModelId = openaiModelId;
@@ -49,12 +52,13 @@ public class ChatGPTBot extends TelegramLongPollingBot {
         String telegramBotToken = props.getProperty("telegramBotToken");
         String telegramBotName = props.getProperty("telegramBotName");
         String openaiModelId = props.getProperty("openaiModelId");
+        String usersFile = props.getProperty("usersFile");
         Long maxTokens = (long) Integer.parseInt(props.getProperty("maxTokens"));
         Integer openApiTimeoutS = Integer.parseInt(props.getProperty("openApiTimeoutS"));
         Long adminChatId = (long) Integer.parseInt(props.getProperty("adminChatId"));
 
         ChatGPTBot bot = new ChatGPTBot(openaiApiKey, telegramBotToken, telegramBotName, openaiModelId, maxTokens,
-                adminChatId, openApiTimeoutS);
+                usersFile, adminChatId, openApiTimeoutS);
         TelegramBotsApi telegramBotsApi = new TelegramBotsApi(DefaultBotSession.class);
         try {
             telegramBotsApi.registerBot(bot);
@@ -77,14 +81,13 @@ public class ChatGPTBot extends TelegramLongPollingBot {
             }
 
             String messageText = update.getMessage().getText();
-            Long userId = update.getMessage().getFrom().getId();
+            User from = update.getMessage().getFrom();
+            Long userId = from.getId();
             Long chatId = update.getMessage().getChatId();
             String chatIdString = chatId.toString();
-
-            // Логгирование запросов пользователей
             log.info(format("Received message from user with ID %s in chat %s : %s", userId, chatIdString, messageText));
 
-            if (adminChatId == null || adminChatId.equals(chatId)) {
+            if (isAdmin(adminChatId) || isApproved(from)) {
                 CompletionRequest request = CompletionRequest.builder()
                         .prompt(messageText)
                         .model(openaiModelId)
@@ -94,7 +97,6 @@ public class ChatGPTBot extends TelegramLongPollingBot {
                 var response = openaiService.createCompletion(request);
 
                 String generatedText = response.getChoices().get(0).getText();
-                // Логгирование ответов пользователей
                 log.info(format("Sending response to user with ID %s in chat %s : %s", userId, chatIdString, generatedText));
 
                 SendMessage sendMessage = new SendMessage(chatId.toString(), generatedText);
@@ -105,6 +107,15 @@ public class ChatGPTBot extends TelegramLongPollingBot {
             log.warning(e.getMessage());
             e.printStackTrace();
         }
+    }
+
+    private boolean isApproved(User from) {
+        boolean res = userService.isApprovedUser(from.getId());
+        return res;
+    }
+
+    private boolean isAdmin(Long adminChatId) {
+        return this.adminChatId == null || this.adminChatId.equals(adminChatId);
     }
 }
 
