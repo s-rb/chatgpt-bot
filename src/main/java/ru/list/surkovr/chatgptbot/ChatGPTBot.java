@@ -151,12 +151,12 @@ public class ChatGPTBot extends TelegramLongPollingBot {
     }
 
     private void askAdminForAccessConfirmation(ru.list.surkovr.chatgptbot.User user) {
+        long userId = user.getUserId();
         String message = "Do you want to give access for user " + "[username=" + user.getUsername()
-                + " userId=" + user.getUserId()
-                + " firstName=" + user.getFirstName() + " lastName=" + user.getLastName() + "]?";
+                + " userId=" + userId + " firstName=" + user.getFirstName() + " lastName=" + user.getLastName() + "]?";
         InlineKeyboardMarkup markup = new InlineKeyboardMarkup(List.of(List.of(
-                getInlineButton("Approve", "accessApproveConfirmation:" + user.getUserId()),
-                getInlineButton("Decline", "accessDeclineConfirmation:" + user.getUserId()))));
+                getInlineButton("Approve", "accessApproveConfirmation:" + userId),
+                getInlineButton("Decline", "accessDeclineConfirmation:" + userId))));
         sendMessageToAdmin(message, markup);
     }
 
@@ -168,34 +168,34 @@ public class ChatGPTBot extends TelegramLongPollingBot {
 
     public void onCallbackQueryReceived(CallbackQuery callbackQuery) {
         String[] data = callbackQuery.getData().split(":");
-        long userId = Long.parseLong(data[1]);
         User tgUser = callbackQuery.getFrom();
+        final Long chatId = callbackQuery.getMessage().getChatId();
         switch (data[0]) {
             case "accessApproval" -> {
-                ru.list.surkovr.chatgptbot.User user = userService.updateStatus(userId, UserStatus.PENDING);
+                ru.list.surkovr.chatgptbot.User user = userService.updateStatus(tgUser, chatId, UserStatus.PENDING);
                 askAdminForAccessConfirmation(user);
             }
             case "accessDecline" -> {
-                ru.list.surkovr.chatgptbot.User user = userService.updateStatus(userId, UserStatus.PENDING);
-                sendMessageToUser(callbackQuery.getMessage().getChatId(), "Access denied", null);
+                ru.list.surkovr.chatgptbot.User user = userService.updateStatus(tgUser, chatId, UserStatus.PENDING);
+                sendMessageToUser(user.getChatId(), "Access denied", null);
             }
             case "accessApproveConfirmation" -> {
                 long approvedUserId = Long.parseLong(data[1]);
-                ru.list.surkovr.chatgptbot.User user = userService.updateStatus(userId, UserStatus.APPROVED);
-                sendMessageToUser(approvedUserId, "Access granted. Welcome!", null);
+                ru.list.surkovr.chatgptbot.User user = userService.updateStatus(approvedUserId, UserStatus.APPROVED);
+                sendMessageToUser(user.getChatId(), "Access granted. Welcome!", null);
                 sendMessageToAdmin("You have approved access for user " + user.getFirstName() + " " +
                         user.getLastName() + " (" + user.getUsername() + ")", null);
             }
             case "accessDeclineConfirmation" -> {
                 long declinedUserId = Long.parseLong(data[1]);
-                ru.list.surkovr.chatgptbot.User user = userService.updateStatus(userId, UserStatus.DECLINED);
-                sendMessageToUser(declinedUserId, "Your request for the access was declined", null);
+                ru.list.surkovr.chatgptbot.User user = userService.updateStatus(declinedUserId, UserStatus.DECLINED);
+                sendMessageToUser(user.getChatId(), "Your request for the access was declined", null);
                 sendMessageToAdmin("You have declined access request from user " + user.getFirstName() + " " +
                         user.getLastName() + " (" + user.getUsername() + ")", null);
             }
             default -> {
                 String errMsg = format("Got unknown, unprocessable command: %s, chatId: %s, userId: %s",
-                        Arrays.toString(data), callbackQuery.getMessage().getChatId(), tgUser.getId());
+                        Arrays.toString(data), chatId, tgUser.getId());
                 log.warning(errMsg);
                 sendMessageToAdmin(errMsg, null);
             }

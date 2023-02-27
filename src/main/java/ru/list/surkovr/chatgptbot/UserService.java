@@ -1,5 +1,6 @@
 package ru.list.surkovr.chatgptbot;
 
+import javax.ws.rs.NotFoundException;
 import java.io.*;
 import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
@@ -35,7 +36,6 @@ public class UserService {
              ObjectInputStream ois = new ObjectInputStream(in)) {
             this.users = (ConcurrentHashMap<Long, User>) ois.readObject();
         } catch (FileNotFoundException e) {
-            // файл еще не создан, ничего не делаем
             log.warning("File not found!");
         } catch (IOException | ClassNotFoundException e) {
             e.printStackTrace();
@@ -56,15 +56,8 @@ public class UserService {
                 .isPresent();
     }
 
-    public void approveUser(org.telegram.telegrambots.meta.api.objects.User from) {
-        User user = users.getOrDefault(from.getId(), createUser(from));
-        user.setStatus(UserStatus.APPROVED);
-        users.put(user.getUserId(), user);
-        saveToFile();
-    }
-
-    public User createUser(org.telegram.telegrambots.meta.api.objects.User user) {
-        User u = new User(user.getId());
+    public User createUser(org.telegram.telegrambots.meta.api.objects.User user, long chatId) {
+        User u = new User(user.getId(), chatId);
         u.setUsername(user.getUserName());
         u.setFirstName(user.getFirstName());
         u.setLastName(user.getLastName());
@@ -73,23 +66,17 @@ public class UserService {
         return u;
     }
 
-    public void rejectUser(long userId) {
-        User user = users.getOrDefault(userId, createUser(userId));
-        user.setStatus(UserStatus.DECLINED);
-        users.put(userId, user);
+    public User updateStatus(org.telegram.telegrambots.meta.api.objects.User tgUser, long chatId, UserStatus status) {
+        User user = users.getOrDefault(tgUser.getId(), createUser(tgUser, chatId));
+        user.setStatus(status);
+        users.put(tgUser.getId(), user);
         saveToFile();
+        return user;
     }
 
-    private User createUser(long userId) {
-        return new User(userId);
-    }
-
-    public User get(long userId) {
-        return users.get(userId);
-    }
-
-    public User updateStatus(long userId, UserStatus status) {
-        User user = users.getOrDefault(userId, createUser(userId));
+    public User updateStatus(long userId, UserStatus status) throws NotFoundException {
+        User user = Optional.ofNullable(users.get(userId))
+                .orElseThrow(() -> new NotFoundException("User not found with userId: " + userId));
         user.setStatus(status);
         users.put(userId, user);
         saveToFile();

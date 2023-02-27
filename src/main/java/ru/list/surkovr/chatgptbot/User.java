@@ -4,20 +4,23 @@ import java.io.Serializable;
 
 public class User implements Serializable {
     private long userId;
+    private long chatId;
     private String firstName;
     private String lastName;
     private String username;
     private UserStatus status;
 
-    public User(long userId) {
+    public User(long userId, long chatId) {
         this.userId = userId;
+        this.chatId = chatId;
     }
 
-    public User(long userId, String firstName, String lastName, String username) {
+    public User(long userId, String firstName, String lastName, String username, long chatId) {
         this.userId = userId;
         this.firstName = firstName;
         this.lastName = lastName;
         this.username = username;
+        this.chatId = chatId;
         this.status = UserStatus.PENDING;
     }
 
@@ -59,5 +62,13 @@ public class User implements Serializable {
 
     public void setStatus(UserStatus status) {
         this.status = status;
+    }
+
+    public long getChatId() {
+        return chatId;
+    }
+
+    public void setChatId(long chatId) {
+        this.chatId = chatId;
     }
 }
