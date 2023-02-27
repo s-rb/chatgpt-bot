@@ -110,6 +110,8 @@ public class ChatGPTBot extends TelegramLongPollingBot {
         log.info(format("Received message from user with ID %s in chat %s : %s", userId, chatIdString, messageText));
 
         if (isAdmin(chatId) || isApproved(from)) {
+            userService.updateData(from, chatId);
+
             CompletionRequest request = CompletionRequest.builder()
                     .prompt(messageText)
                     .model(openaiModelId)

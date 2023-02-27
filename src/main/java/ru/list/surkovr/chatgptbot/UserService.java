@@ -2,6 +2,7 @@ package ru.list.surkovr.chatgptbot;
 
 import javax.ws.rs.NotFoundException;
 import java.io.*;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.logging.Logger;
@@ -10,7 +11,7 @@ public class UserService {
     private static final Logger log = Logger.getLogger(UserService.class.getName());
 
     private final String filePath;
-    private ConcurrentHashMap<Long, User> users;
+    private final ConcurrentHashMap<Long, User> users;
 
     public UserService(String filePath) {
         this.users = new ConcurrentHashMap<>();
@@ -32,19 +33,40 @@ public class UserService {
     }
 
     private void readFromFile() {
-        try (FileInputStream in = new FileInputStream(getFile());
-             ObjectInputStream ois = new ObjectInputStream(in)) {
-            this.users = (ConcurrentHashMap<Long, User>) ois.readObject();
+        try (BufferedReader br = new BufferedReader(new FileReader(getFile()))) {
+            String line;
+            while ((line = br.readLine()) != null) {
+                String[] parts = line.split(";");
+                long userId = Long.parseLong(parts[0]);
+                long chatId = Long.parseLong(parts[1]);
+                String firstName = parts[2];
+                String lastName = parts[3];
+                String username = parts[4];
+                UserStatus status = UserStatus.valueOf(parts[5]);
+                User user = new User(userId, chatId, firstName, lastName, username, status);
+                users.put(userId, user);
+            }
         } catch (FileNotFoundException e) {
             log.warning("File not found!");
-        } catch (IOException | ClassNotFoundException e) {
+        } catch (IOException e) {
             e.printStackTrace();
         }
     }
 
     private void saveToFile() {
-        try (ObjectOutputStream oos = new ObjectOutputStream(new FileOutputStream(getFile()))) {
-            oos.writeObject(users);
+        File file = getFile();
+        try (BufferedWriter bw = new BufferedWriter(new FileWriter(file))) {
+            new PrintWriter(file).close();
+            for (User user : users.values()) {
+                StringBuilder sb = new StringBuilder();
+                sb.append(user.getUserId()).append(";")
+                        .append(user.getChatId()).append(";")
+                        .append(user.getFirstName()).append(";")
+                        .append(user.getLastName()).append(";")
+                        .append(user.getUsername()).append(";")
+                        .append(user.getStatus().name()).append("\n");
+                bw.write(sb.toString());
+            }
         } catch (IOException e) {
             e.printStackTrace();
         }
@@ -81,6 +103,37 @@ public class UserService {
         users.put(userId, user);
         saveToFile();
         return user;
+    }
+
+    public void updateData(org.telegram.telegrambots.meta.api.objects.User tgUser, Long chatId) {
+        User user = users.get(tgUser.getId());
+        if (user == null) {
+            createUser(tgUser, chatId);
+            saveToFile();
+            return;
+        }
+
+        boolean isUpdated = false;
+        if (!Objects.equals(tgUser.getUserName(), user.getUsername())) {
+            user.setUsername(tgUser.getUserName());
+            isUpdated = true;
+        }
+        if (!Objects.equals(tgUser.getFirstName(), user.getFirstName())) {
+            user.setFirstName(tgUser.getFirstName());
+            isUpdated = true;
+        }
+        if (!Objects.equals(tgUser.getLastName(), user.getLastName())) {
+            user.setLastName(tgUser.getLastName());
+            isUpdated = true;
+        }
+        if (!Objects.equals(chatId, user.getChatId())) {
+            user.setChatId(chatId);
+            isUpdated = true;
+        }
+        if (isUpdated) {
+            users.put(tgUser.getId(), user);
+            saveToFile();
+        }
     }
 }
 

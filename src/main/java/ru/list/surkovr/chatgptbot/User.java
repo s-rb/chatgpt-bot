@@ -15,13 +15,13 @@ public class User implements Serializable {
         this.chatId = chatId;
     }
 
-    public User(long userId, String firstName, String lastName, String username, long chatId) {
+    public User(long userId, long chatId, String firstName, String lastName, String username, UserStatus status) {
         this.userId = userId;
         this.firstName = firstName;
         this.lastName = lastName;
         this.username = username;
         this.chatId = chatId;
-        this.status = UserStatus.PENDING;
+        this.status = status;
     }
 
     public long getUserId() {
