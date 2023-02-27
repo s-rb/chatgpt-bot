@@ -36,7 +36,7 @@ public class UserService {
             this.users = (ConcurrentHashMap<Long, User>) ois.readObject();
         } catch (FileNotFoundException e) {
             // файл еще не создан, ничего не делаем
-            log.warning("Файл не найден!");
+            log.warning("File not found!");
         } catch (IOException | ClassNotFoundException e) {
             e.printStackTrace();
         }

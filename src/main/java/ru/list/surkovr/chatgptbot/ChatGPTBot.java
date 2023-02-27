@@ -123,7 +123,7 @@ public class ChatGPTBot extends TelegramLongPollingBot {
 
             sendMessageToUser(chatId, generatedText, null);
         } else {
-            sendMessageToUser(userId, "Вам это действие недоступно", null);
+            sendMessageToUser(userId, "Access denied", null);
             askForAccessApproval(from);
         }
     }
@@ -141,22 +141,22 @@ public class ChatGPTBot extends TelegramLongPollingBot {
     }
 
     private void askForAccessApproval(User user) {
-        String messageText = "Вы хотите отправить администратору запрос на доступ?";
+        String messageText = "Do you want to request the access?";
         InlineKeyboardMarkup markup = new InlineKeyboardMarkup(
                 List.of(List.of(
-                        getInlineButton("Да", "accessApproval:" + user.getId()),
-                        getInlineButton("Нет", "accessDecline:" + user.getId())
+                        getInlineButton("Yes", "accessApproval:" + user.getId()),
+                        getInlineButton("No", "accessDecline:" + user.getId())
                 )));
         sendMessageToUser(user.getId(), messageText, markup);
     }
 
     private void askAdminForAccessConfirmation(ru.list.surkovr.chatgptbot.User user) {
-        String message = "Вы хотите дать доступ пользователю " + "[username=" + user.getUsername()
+        String message = "Do you want to give access for user " + "[username=" + user.getUsername()
                 + " userId=" + user.getUserId()
                 + " firstName=" + user.getFirstName() + " lastName=" + user.getLastName() + "]?";
         InlineKeyboardMarkup markup = new InlineKeyboardMarkup(List.of(List.of(
-                getInlineButton("Подтвердить", "accessApproveConfirmation:" + user.getUserId()),
-                getInlineButton("Отклонить", "accessDeclineConfirmation:" + user.getUserId()))));
+                getInlineButton("Approve", "accessApproveConfirmation:" + user.getUserId()),
+                getInlineButton("Decline", "accessDeclineConfirmation:" + user.getUserId()))));
         sendMessageToAdmin(message, markup);
     }
 
@@ -177,24 +177,24 @@ public class ChatGPTBot extends TelegramLongPollingBot {
             }
             case "accessDecline" -> {
                 ru.list.surkovr.chatgptbot.User user = userService.updateStatus(userId, UserStatus.PENDING);
-                sendMessageToUser(callbackQuery.getMessage().getChatId(), "Нет доступа", null);
+                sendMessageToUser(callbackQuery.getMessage().getChatId(), "Access denied", null);
             }
             case "accessApproveConfirmation" -> {
                 long approvedUserId = Long.parseLong(data[1]);
                 ru.list.surkovr.chatgptbot.User user = userService.updateStatus(userId, UserStatus.APPROVED);
-                sendMessageToUser(approvedUserId, "Вам предоставлен доступ", null);
-                sendMessageToAdmin("Вы одобрили запрос на доступ для " + user.getFirstName() + " " +
+                sendMessageToUser(approvedUserId, "Access granted. Welcome!", null);
+                sendMessageToAdmin("You have approved access for user " + user.getFirstName() + " " +
                         user.getLastName() + " (" + user.getUsername() + ")", null);
             }
             case "accessDeclineConfirmation" -> {
                 long declinedUserId = Long.parseLong(data[1]);
                 ru.list.surkovr.chatgptbot.User user = userService.updateStatus(userId, UserStatus.DECLINED);
-                sendMessageToUser(declinedUserId, "Вам отказано в доступе", null);
-                sendMessageToAdmin("Вы отказали в доступе для " + user.getFirstName() + " " +
+                sendMessageToUser(declinedUserId, "Your request for the access was declined", null);
+                sendMessageToAdmin("You have declined access request from user " + user.getFirstName() + " " +
                         user.getLastName() + " (" + user.getUsername() + ")", null);
             }
             default -> {
-                String errMsg = format("Получена неизвестная, необрабатываемая команда: %s, chatId: %s, userId: %s",
+                String errMsg = format("Got unknown, unprocessable command: %s, chatId: %s, userId: %s",
                         Arrays.toString(data), callbackQuery.getMessage().getChatId(), tgUser.getId());
                 log.warning(errMsg);
                 sendMessageToAdmin(errMsg, null);
@@ -202,7 +202,6 @@ public class ChatGPTBot extends TelegramLongPollingBot {
         }
     }
 
-    // Метод для отправки сообщения пользователю
     private void sendMessageToUser(long chatId, String message, InlineKeyboardMarkup inlineKeyboardMarkup) {
         SendMessage sendMessage = new SendMessage(String.valueOf(chatId), message);
         if (inlineKeyboardMarkup != null) sendMessage.setReplyMarkup(inlineKeyboardMarkup);
@@ -213,7 +212,6 @@ public class ChatGPTBot extends TelegramLongPollingBot {
         }
     }
 
-    // Метод для отправки сообщения админу
     private void sendMessageToAdmin(String message, InlineKeyboardMarkup inlineKeyboardMarkup) {
         sendMessageToUser(adminChatId, message, inlineKeyboardMarkup);
     }
