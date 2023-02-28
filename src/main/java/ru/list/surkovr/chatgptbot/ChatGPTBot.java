@@ -29,6 +29,7 @@ import static java.lang.String.format;
 
 public class ChatGPTBot extends TelegramLongPollingBot {
     private static final Logger log = Logger.getLogger(ChatGPTBot.class.getSimpleName());
+    public static final int DELTA_TOKENS = 200;
 
     private final String telegramBotName;
     private final String openaiModelId;
@@ -113,13 +114,19 @@ public class ChatGPTBot extends TelegramLongPollingBot {
         String chatIdString = chatId.toString();
         log.info(format("Received message from user with ID %s in chat %s : %s", userId, chatIdString, messageText));
 
+        if (maxTokens - messageText.length() < DELTA_TOKENS) {
+            log.info(format("Received too long input message [%s] length", messageText.length()));
+            sendMessageToUser(chatId, "You have entered too long message, please make it shorter", null);
+            return;
+        }
+
         if (isAdmin(chatId) || isApproved(from)) {
             userService.updateData(from, chatId);
 
             CompletionRequest request = CompletionRequest.builder()
                     .prompt(messageText)
                     .model(openaiModelId)
-                    .maxTokens(maxTokens.intValue())
+                    .maxTokens(maxTokens.intValue() - messageText.length())
                     .build();
 
             var response = openaiService.createCompletion(request);
