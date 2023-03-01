@@ -4,8 +4,11 @@ import javax.ws.rs.NotFoundException;
 import java.io.*;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.logging.Logger;
+
+import static ru.list.surkovr.chatgptbot.Utils.hasText;
 
 public class UserService {
     private static final Logger log = Logger.getLogger(UserService.class.getName());
@@ -43,7 +46,8 @@ public class UserService {
                 String lastName = parts[3];
                 String username = parts[4];
                 UserStatus status = UserStatus.valueOf(parts[5]);
-                User user = new User(userId, chatId, firstName, lastName, username, status);
+                String openAiUser = parts.length > 6 && !parts[6].equals("null") ? parts[6] : null;
+                User user = new User(userId, chatId, firstName, lastName, username, status, openAiUser);
                 users.put(userId, user);
             }
         } catch (FileNotFoundException e) {
@@ -64,7 +68,8 @@ public class UserService {
                         .append(user.getFirstName()).append(";")
                         .append(user.getLastName()).append(";")
                         .append(user.getUsername()).append(";")
-                        .append(user.getStatus().name()).append("\n");
+                        .append(user.getStatus().name()).append(";")
+                        .append(user.getOpenAiUser()).append("\n");
                 bw.write(sb.toString());
             }
         } catch (IOException e) {
@@ -84,6 +89,7 @@ public class UserService {
         u.setFirstName(user.getFirstName());
         u.setLastName(user.getLastName());
         u.setStatus(UserStatus.PENDING);
+        u.setOpenAiUser(String.valueOf(UUID.randomUUID()));
         users.put(user.getId(), u);
         return u;
     }
@@ -91,6 +97,7 @@ public class UserService {
     public User updateStatus(org.telegram.telegrambots.meta.api.objects.User tgUser, long chatId, UserStatus status) {
         User user = users.getOrDefault(tgUser.getId(), createUser(tgUser, chatId));
         user.setStatus(status);
+        if (!hasText(user.getOpenAiUser())) user.setOpenAiUser(UUID.randomUUID().toString());
         users.put(tgUser.getId(), user);
         saveToFile();
         return user;
@@ -105,12 +112,12 @@ public class UserService {
         return user;
     }
 
-    public void updateData(org.telegram.telegrambots.meta.api.objects.User tgUser, Long chatId) {
+    public User updateData(org.telegram.telegrambots.meta.api.objects.User tgUser, Long chatId) {
         User user = users.get(tgUser.getId());
         if (user == null) {
-            createUser(tgUser, chatId);
+            User usr = createUser(tgUser, chatId);
             saveToFile();
-            return;
+            return usr;
         }
 
         boolean isUpdated = false;
@@ -130,10 +137,15 @@ public class UserService {
             user.setChatId(chatId);
             isUpdated = true;
         }
+        if (!hasText(user.getOpenAiUser())) {
+            user.setOpenAiUser(UUID.randomUUID().toString());
+            isUpdated = true;
+        }
         if (isUpdated) {
             users.put(tgUser.getId(), user);
             saveToFile();
         }
+        return user;
     }
 }
 

@@ -9,19 +9,21 @@ public class User implements Serializable {
     private String lastName;
     private String username;
     private UserStatus status;
+    private String openAiUser;
 
     public User(long userId, long chatId) {
         this.userId = userId;
         this.chatId = chatId;
     }
 
-    public User(long userId, long chatId, String firstName, String lastName, String username, UserStatus status) {
+    public User(long userId, long chatId, String firstName, String lastName, String username, UserStatus status, String openAiUser) {
         this.userId = userId;
         this.firstName = firstName;
         this.lastName = lastName;
         this.username = username;
         this.chatId = chatId;
         this.status = status;
+        this.openAiUser = openAiUser;
     }
 
     public long getUserId() {
@@ -70,5 +72,13 @@ public class User implements Serializable {
 
     public void setChatId(long chatId) {
         this.chatId = chatId;
+    }
+
+    public String getOpenAiUser() {
+        return openAiUser;
+    }
+
+    public void setOpenAiUser(String openAiUser) {
+        this.openAiUser = openAiUser;
     }
 }
