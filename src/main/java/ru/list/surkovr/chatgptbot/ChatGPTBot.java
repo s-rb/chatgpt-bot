@@ -23,7 +23,9 @@ import java.time.Duration;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Properties;
+import java.util.Set;
 import java.util.logging.Logger;
+import java.util.stream.Collectors;
 
 import static java.lang.String.format;
 import static ru.list.surkovr.chatgptbot.Utils.hasText;
@@ -36,6 +38,8 @@ public class ChatGPTBot extends TelegramLongPollingBot {
     private final String openaiModelId;
     private final Long maxTokens;
     private final Long adminChatId;
+
+    private final Set<String> commands = Arrays.stream(Commands.values()).map(Commands::getValue).collect(Collectors.toSet());
 
     private final UserService userService;
     private final OpenAiService openaiService;
@@ -86,7 +90,7 @@ public class ChatGPTBot extends TelegramLongPollingBot {
     @Override
     public void onUpdateReceived(Update update) {
         try {
-            if ((!update.hasMessage() || !update.getMessage().hasText()) && (!update.hasCallbackQuery())) {
+            if (!hasTextQuery(update) && (!update.hasCallbackQuery())) {
                 log.warning(format("Update has no message: update: [%s], message: [%s]", update, update.getMessage()));
                 return;
             }
@@ -102,12 +106,21 @@ public class ChatGPTBot extends TelegramLongPollingBot {
         }
     }
 
+    private boolean hasTextQuery(Update update) {
+        return update.hasMessage() && update.getMessage().hasText();
+    }
+
     private void onTextMessageReceived(Update update) {
         final Message message = update.getMessage();
         final Integer messageId = message.getMessageId();
         String messageText = message.getText();
         if (isExcludedCommand(messageText)) {
             log.info(format("Update has unprocessable message: [%s]", messageText));
+            return;
+        }
+
+        if (isCommand(messageText)) {
+            onCommandReceived(update);
             return;
         }
 
@@ -145,13 +158,35 @@ public class ChatGPTBot extends TelegramLongPollingBot {
         }
     }
 
+    private void onCommandReceived(Update update) {
+        try {
+            final Message message = update.getMessage();
+            String messageText = message.getText();
+            Commands command = Commands.getCommand(messageText.toLowerCase());
+            if (command == null) return;
+            switch (command) {
+                case START -> sendMessageToUser(update.getMessage().getChatId(),
+                        format("Welcome %s!\nThis bot lets you ask questions to ChatGpt from OpenAI.\nSend any message to start",
+                                Utils.getTgUserName(update.getMessage().getFrom())),
+                        null);
+                default -> log.warning(format("Command [%s] not recognized", command));
+            }
+        } catch (Exception e) {
+            log.throwing(getClass().getSimpleName(), "onCommandReceived", e);
+        }
+    }
+
     private void sendAnswerToUser(Long chatId, Integer srcMessageId, String text) {
         SendMessage sendMsg = SendMessage.builder().text(text).chatId(chatId).replyToMessageId(srcMessageId).build();
         executeMsgAction(sendMsg);
     }
 
-    private boolean isExcludedCommand(String messageText) {
-        return messageText.startsWith("/");
+    private boolean isExcludedCommand(String command) {
+        return command.startsWith("/") && !isCommand(command);
+    }
+
+    private boolean isCommand(String command) {
+        return commands.contains(command.toLowerCase());
     }
 
     private boolean isApproved(User from) {
