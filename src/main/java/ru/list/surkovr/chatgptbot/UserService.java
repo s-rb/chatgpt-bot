@@ -2,6 +2,7 @@ package ru.list.surkovr.chatgptbot;
 
 import javax.ws.rs.NotFoundException;
 import java.io.*;
+import java.util.ArrayList;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.UUID;
@@ -98,6 +99,7 @@ public class UserService {
         User user = users.getOrDefault(tgUser.getId(), createUser(tgUser, chatId));
         user.setStatus(status);
         if (!hasText(user.getOpenAiUser())) user.setOpenAiUser(UUID.randomUUID().toString());
+        if (user.getMessages() == null) user.setMessages(new ArrayList<>());
         users.put(tgUser.getId(), user);
         saveToFile();
         return user;
@@ -107,6 +109,7 @@ public class UserService {
         User user = Optional.ofNullable(users.get(userId))
                 .orElseThrow(() -> new NotFoundException("User not found with userId: " + userId));
         user.setStatus(status);
+        if (user.getMessages() == null) user.setMessages(new ArrayList<>());
         users.put(userId, user);
         saveToFile();
         return user;
@@ -139,6 +142,10 @@ public class UserService {
         }
         if (!hasText(user.getOpenAiUser())) {
             user.setOpenAiUser(UUID.randomUUID().toString());
+            isUpdated = true;
+        }
+        if (user.getMessages() == null) {
+            user.setMessages(new ArrayList<>());
             isUpdated = true;
         }
         if (isUpdated) {

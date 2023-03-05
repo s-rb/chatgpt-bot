@@ -1,9 +1,11 @@
 package ru.list.surkovr.chatgptbot;
 
-import com.theokanning.openai.completion.CompletionRequest;
+import com.theokanning.openai.completion.chat.ChatCompletionRequest;
+import com.theokanning.openai.completion.chat.ChatCompletionResult;
+import com.theokanning.openai.completion.chat.ChatMessage;
+import com.theokanning.openai.completion.chat.ChatMessageRole;
 import com.theokanning.openai.service.OpenAiService;
 import org.telegram.telegrambots.bots.TelegramLongPollingBot;
-import org.telegram.telegrambots.meta.TelegramBotsApi;
 import org.telegram.telegrambots.meta.api.methods.BotApiMethod;
 import org.telegram.telegrambots.meta.api.methods.send.SendMessage;
 import org.telegram.telegrambots.meta.api.methods.updatingmessages.DeleteMessage;
@@ -14,72 +16,34 @@ import org.telegram.telegrambots.meta.api.objects.Update;
 import org.telegram.telegrambots.meta.api.objects.User;
 import org.telegram.telegrambots.meta.api.objects.replykeyboard.InlineKeyboardMarkup;
 import org.telegram.telegrambots.meta.exceptions.TelegramApiException;
-import org.telegram.telegrambots.updatesreceivers.DefaultBotSession;
 
-import java.io.IOException;
-import java.io.InputStream;
 import java.io.Serializable;
 import java.time.Duration;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
-import java.util.Properties;
-import java.util.Set;
 import java.util.logging.Logger;
-import java.util.stream.Collectors;
 
 import static java.lang.String.format;
 import static ru.list.surkovr.chatgptbot.Utils.hasText;
+import static ru.list.surkovr.chatgptbot.Utils.isCommand;
 
 public class ChatGPTBot extends TelegramLongPollingBot {
-    private static final Logger log = Logger.getLogger(ChatGPTBot.class.getSimpleName());
-    public static final int DELTA_TOKENS = 200;
+    private final Logger log = Logger.getLogger(ChatGPTBot.class.getSimpleName());
 
     private final String telegramBotName;
-    private final String openaiModelId;
-    private final Long maxTokens;
     private final Long adminChatId;
-
-    private final Set<String> commands = Arrays.stream(Commands.values()).map(Commands::getValue).collect(Collectors.toSet());
 
     private final UserService userService;
     private final OpenAiService openaiService;
 
-    public ChatGPTBot(String openaiApiKey, String telegramBotToken, String telegramBotName, String openaiModelId,
-                      Long maxTokens, String usersFile, Long adminChatId, Integer openApiTimeoutS) {
+    public ChatGPTBot(String openaiApiKey, String telegramBotToken, String telegramBotName, String usersFile,
+                      Long adminChatId, Integer openApiTimeoutS) {
         super(telegramBotToken);
         this.userService = new UserService(usersFile);
         this.openaiService = new OpenAiService(openaiApiKey, Duration.ofSeconds(openApiTimeoutS));
         this.telegramBotName = telegramBotName;
-        this.openaiModelId = openaiModelId;
-        this.maxTokens = maxTokens;
         this.adminChatId = adminChatId;
-    }
-
-    public static void main(String[] args) throws TelegramApiException {
-        Properties props = new Properties();
-        try (InputStream is = ChatGPTBot.class.getClassLoader().getResourceAsStream("application.properties")) {
-            props.load(is);
-        } catch (IOException e) {
-            e.printStackTrace();
-        }
-
-        String openaiApiKey = props.getProperty("openaiApiKey");
-        String telegramBotToken = props.getProperty("telegramBotToken");
-        String telegramBotName = props.getProperty("telegramBotName");
-        String openaiModelId = props.getProperty("openaiModelId");
-        String usersFile = props.getProperty("usersFile");
-        Long maxTokens = (long) Integer.parseInt(props.getProperty("maxTokens"));
-        Integer openApiTimeoutS = Integer.parseInt(props.getProperty("openApiTimeoutS"));
-        Long adminChatId = (long) Integer.parseInt(props.getProperty("adminChatId"));
-
-        ChatGPTBot bot = new ChatGPTBot(openaiApiKey, telegramBotToken, telegramBotName, openaiModelId, maxTokens,
-                usersFile, adminChatId, openApiTimeoutS);
-        TelegramBotsApi telegramBotsApi = new TelegramBotsApi(DefaultBotSession.class);
-        try {
-            telegramBotsApi.registerBot(bot);
-        } catch (TelegramApiException e) {
-            e.printStackTrace();
-        }
     }
 
     @Override
@@ -114,48 +78,72 @@ public class ChatGPTBot extends TelegramLongPollingBot {
         final Message message = update.getMessage();
         final Integer messageId = message.getMessageId();
         String messageText = message.getText();
-        if (isExcludedCommand(messageText)) {
-            log.info(format("Update has unprocessable message: [%s]", messageText));
-            return;
-        }
-
-        if (isCommand(messageText)) {
-            onCommandReceived(update);
-            return;
-        }
-
         User from = message.getFrom();
         Long userId = from.getId();
         Long chatId = message.getChatId();
         String chatIdString = chatId.toString();
         log.info(format("Received message from user with ID %s in chat %s : %s", userId, chatIdString, messageText));
 
-        if (maxTokens - messageText.length() < DELTA_TOKENS) {
+        if (isExcludedCommand(messageText)) {
+            log.info(format("Update has unprocessable message: [%s]", messageText));
+            sendAnswerToUser(chatId, messageId, "You are trying to execute command, because you message starts with '/'. I don't know such command");
+        } else if (isCommand(messageText)) {
+            onCommandReceived(update);
+        } else if (isMessageTooLong(messageText)) {
             log.info(format("Received too long input message [%s] length", messageText.length()));
             sendMessageToUser(chatId, "You have entered too long message, please make it shorter", null);
-            return;
-        }
+        } else if (isAdmin(chatId) || isApproved(from)) {
+            final var user = userService.updateData(from, chatId);
 
-        if (isAdmin(chatId) || isApproved(from)) {
-            final ru.list.surkovr.chatgptbot.User user = userService.updateData(from, chatId);
-
-            CompletionRequest.CompletionRequestBuilder builder = CompletionRequest.builder()
-                    .prompt(messageText).model(openaiModelId)
-                    .maxTokens(maxTokens.intValue() - messageText.length());
-            if (hasText(user.getOpenAiUser())) builder = builder.user(user.getOpenAiUser());
-            CompletionRequest request = builder.build();
-
-            var response = openaiService.createCompletion(request);
+            List<ChatMessage> messages = prepareMessages(user.getMessages(), messageText);
+            ChatCompletionRequest request = getChatCompletionRequest(user, messages);
+            var response = getChatCompletionSafely(request);
+            if (response == null) {
+                sendAnswerToUser(chatId, messageId, "Sorry, I don't have answer now. Try again later");
+                return;
+            }
+            user.setMessages(messages);
 
             response.getChoices().forEach(choice -> {
-                String generatedText = choice.getText();
-                log.info(format("Sending response to user with ID %s in chat %s : %s", userId, chatIdString, generatedText));
+                ChatMessage chatMessage = choice.getMessage();
+                final String generatedText = chatMessage.getContent();
+                final String role = chatMessage.getRole();
+                log.info(format("Sending response to user with ID [%s] in chat [%s] role[%s]: message[%s]", userId, chatIdString, role, generatedText));
+                user.setMessages(prepareMessages(user.getMessages(), chatMessage));
                 sendAnswerToUser(chatId, messageId, hasText(generatedText) ? generatedText : "Sorry, I don't have answer");
             });
         } else {
             sendMessageToUser(userId, "Access denied", null);
             askForAccessApproval(from);
         }
+    }
+
+    private boolean isMessageTooLong(String messageText) {
+        return Constants.MAX_TOKENS - messageText.length() < Constants.COMPLETION_TOKENS;
+    }
+
+    private ChatCompletionRequest getChatCompletionRequest(ru.list.surkovr.chatgptbot.User user, List<ChatMessage> messages) {
+        var builder = ChatCompletionRequest.builder()
+                .messages(messages)
+                .model(Constants.OPENAI_MODEL_ID)
+                .maxTokens(Constants.MAX_TOKENS.intValue() -
+                        messages.stream().map(o -> o.getContent().length()).reduce(Integer::sum).orElse(0));
+        if (hasText(user.getOpenAiUser())) builder = builder.user(user.getOpenAiUser());
+        var request = builder.build();
+        return request;
+    }
+
+    private ChatCompletionResult getChatCompletionSafely(ChatCompletionRequest request) {
+        int attemptsRemain = Constants.ATTEMPTS_TO_CALL_OPEN_AI_API;
+        ChatCompletionResult res = null;
+        while (attemptsRemain-- > 0 && res == null) {
+            try {
+                res = openaiService.createChatCompletion(request);
+            } catch (Exception e) {
+                e.printStackTrace();
+            }
+        }
+        return res;
     }
 
     private void onCommandReceived(Update update) {
@@ -176,25 +164,16 @@ public class ChatGPTBot extends TelegramLongPollingBot {
         }
     }
 
-    private void sendAnswerToUser(Long chatId, Integer srcMessageId, String text) {
-        SendMessage sendMsg = SendMessage.builder().text(text).chatId(chatId).replyToMessageId(srcMessageId).build();
-        executeMsgAction(sendMsg);
-    }
-
     private boolean isExcludedCommand(String command) {
         return command.startsWith("/") && !isCommand(command);
     }
 
-    private boolean isCommand(String command) {
-        return commands.contains(command.toLowerCase());
+    private boolean isApproved(User user) {
+        return userService.isApprovedUser(user.getId());
     }
 
-    private boolean isApproved(User from) {
-        return userService.isApprovedUser(from.getId());
-    }
-
-    private boolean isAdmin(Long adminChatId) {
-        return this.adminChatId == null || this.adminChatId.equals(adminChatId);
+    private boolean isAdmin(Long chatId) {
+        return this.adminChatId == null || this.adminChatId.equals(chatId);
     }
 
     private void askForAccessApproval(User user) {
@@ -254,17 +233,9 @@ public class ChatGPTBot extends TelegramLongPollingBot {
         }
     }
 
-    private void editMessage(String newText, Long chatId, Integer messageId) {
-        final EditMessageText msg = new EditMessageText();
-        msg.setChatId(chatId);
-        msg.setMessageId(messageId);
-        msg.setText(newText);
-        msg.setReplyMarkup(null);
-        executeMsgAction(msg);
-    }
-
-    private void deleteMessage(Long chatId, Integer messageId) {
-        executeMsgAction(new DeleteMessage(String.valueOf(chatId), messageId));
+    private void sendAnswerToUser(Long chatId, Integer srcMessageId, String text) {
+        SendMessage sendMsg = SendMessage.builder().text(text).chatId(chatId).replyToMessageId(srcMessageId).build();
+        executeMsgAction(sendMsg);
     }
 
     private void sendMessageToUser(long chatId, String message, InlineKeyboardMarkup inlineKeyboardMarkup) {
@@ -289,5 +260,68 @@ public class ChatGPTBot extends TelegramLongPollingBot {
         log.warning(message);
         sendMessageToUser(adminChatId, "#ERROR\n\n" + message, inlineKeyboardMarkup);
     }
+
+    private void editMessage(String newText, Long chatId, Integer messageId) {
+        final EditMessageText msg = new EditMessageText();
+        msg.setChatId(chatId);
+        msg.setMessageId(messageId);
+        msg.setText(newText);
+        msg.setReplyMarkup(null);
+        executeMsgAction(msg);
+    }
+
+    private void deleteMessage(Long chatId, Integer messageId) {
+        executeMsgAction(new DeleteMessage(String.valueOf(chatId), messageId));
+    }
+
+    private List<ChatMessage> prepareMessages(List<ChatMessage> messages, String messageText) {
+        return prepareMessages(messages, new ChatMessage(ChatMessageRole.USER.value(), messageText));
+    }
+
+    /*private List<ChatMessage> prepareMessages(List<ChatMessage> messages, ChatMessage chatMessage) {
+        if (messages == null) messages = new ArrayList<>();
+        if (!messages.isEmpty() && messages.size() >= Constants.MAX_MESSAGES_TO_STORE_FOR_USER) {
+            messages = messages.subList(messages.size() - Constants.MAX_MESSAGES_TO_STORE_FOR_USER + 1, messages.size());
+        }
+        messages.add(chatMessage);
+
+        if (!messages.isEmpty()) {
+            int i = messages.size() - 1;
+            int sum = 0;
+            while (i >= 0) {
+                sum += messages.get(i).getContent().length();
+                if (sum > (Constants.MAX_TOKENS - Constants.COMPLETION_TOKENS) || i == 0) break;
+                i--;
+            }
+            messages = messages.subList(i < messages.size() ? i + 1 : i, messages.size());
+        }
+        return messages;
+    }*/
+
+    public List<ChatMessage> prepareMessages(List<ChatMessage> messages, ChatMessage chatMessage) {
+        int MAX_MESSAGES = Constants.MAX_MESSAGES_TO_STORE_FOR_USER;
+        long MAX_CONTENT = Constants.MAX_TOKENS - Constants.COMPLETION_TOKENS;
+        List<ChatMessage> newMessages = new ArrayList<>(messages);
+
+        // Добавляем новое сообщение в конец списка
+        newMessages.add(chatMessage);
+
+        // Проверяем, не превышает ли общее количество сообщений максимально допустимое значение
+        while (newMessages.size() > MAX_MESSAGES) {
+            newMessages.remove(0);
+        }
+
+        int totalContentLength = newMessages.stream().mapToInt(m -> m.getContent().length()).sum();
+
+        // Проверяем, не превышает ли общая длина контента максимально допустимое значение
+        while (totalContentLength > MAX_CONTENT) {
+            ChatMessage removedMessage = newMessages.remove(0);
+            totalContentLength -= removedMessage.getContent().length();
+        }
+
+        return newMessages;
+    }
+
+
 }
 

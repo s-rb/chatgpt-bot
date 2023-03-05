@@ -3,10 +3,14 @@ package ru.list.surkovr.chatgptbot;
 import org.telegram.telegrambots.meta.api.objects.User;
 import org.telegram.telegrambots.meta.api.objects.replykeyboard.buttons.InlineKeyboardButton;
 
+import java.util.Arrays;
+import java.util.Set;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
 public class Utils {
+
+    public static final Set<String> commands = Arrays.stream(Commands.values()).map(Commands::getValue).collect(Collectors.toSet());
 
     private Utils() {
     }
@@ -27,5 +31,9 @@ public class Utils {
         final String userName = user.getUserName();
         return !hasText(firstName) && !hasText(lastName) ? userName
                 : (Stream.of(firstName, lastName).filter(Utils::hasText).collect(Collectors.joining(" ")));
+    }
+
+    public static boolean isCommand(String command) {
+        return commands.contains(command.toLowerCase());
     }
 }

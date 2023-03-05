@@ -1,6 +1,10 @@
 package ru.list.surkovr.chatgptbot;
 
+import com.theokanning.openai.completion.chat.ChatMessage;
+
 import java.io.Serializable;
+import java.util.ArrayList;
+import java.util.List;
 
 public class User implements Serializable {
     private long userId;
@@ -10,6 +14,7 @@ public class User implements Serializable {
     private String username;
     private UserStatus status;
     private String openAiUser;
+    private List<ChatMessage> messages = new ArrayList<>();
 
     public User(long userId, long chatId) {
         this.userId = userId;
@@ -80,5 +85,13 @@ public class User implements Serializable {
 
     public void setOpenAiUser(String openAiUser) {
         this.openAiUser = openAiUser;
+    }
+
+    public List<ChatMessage> getMessages() {
+        return messages;
+    }
+
+    public void setMessages(List<ChatMessage> messages) {
+        this.messages = messages;
     }
 }
