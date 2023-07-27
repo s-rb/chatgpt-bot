@@ -29,21 +29,24 @@ import static ru.list.surkovr.chatgptbot.Utils.hasText;
 import static ru.list.surkovr.chatgptbot.Utils.isCommand;
 
 public class ChatGPTBot extends TelegramLongPollingBot {
+    public static final int CHAT_COMPLETEIONS_WILL_BE_GENERATED_FOR_MSG = 1;
     private final Logger log = Logger.getLogger(ChatGPTBot.class.getSimpleName());
 
     private final String telegramBotName;
     private final Long adminChatId;
+    private final String model;
 
     private final UserService userService;
     private final OpenAiService openaiService;
 
     public ChatGPTBot(String openaiApiKey, String telegramBotToken, String telegramBotName, String usersFile,
-                      Long adminChatId, Integer openApiTimeoutS) {
+                      Long adminChatId, Integer openApiTimeoutS, String model) {
         super(telegramBotToken);
         this.userService = new UserService(usersFile);
         this.openaiService = new OpenAiService(openaiApiKey, Duration.ofSeconds(openApiTimeoutS));
         this.telegramBotName = telegramBotName;
         this.adminChatId = adminChatId;
+        this.model = model;
     }
 
     @Override
@@ -124,10 +127,13 @@ public class ChatGPTBot extends TelegramLongPollingBot {
 
     private ChatCompletionRequest getChatCompletionRequest(ru.list.surkovr.chatgptbot.User user, List<ChatMessage> messages) {
         var builder = ChatCompletionRequest.builder()
+                .model(model)
                 .messages(messages)
                 .model(Constants.OPENAI_MODEL_ID)
+                .n(CHAT_COMPLETEIONS_WILL_BE_GENERATED_FOR_MSG)
                 .maxTokens(Constants.MAX_TOKENS.intValue() -
-                        messages.stream().map(o -> o.getContent().length()).reduce(Integer::sum).orElse(0));
+                        messages.stream().map(o -> o.getContent().length()).reduce(Integer::sum).orElse(0))
+                ;
         if (hasText(user.getOpenAiUser())) builder = builder.user(user.getOpenAiUser());
         var request = builder.build();
         return request;

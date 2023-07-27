@@ -22,11 +22,12 @@ public class Application {
         String telegramBotToken = props.getProperty("telegramBotToken");
         String telegramBotName = props.getProperty("telegramBotName");
         String usersFile = props.getProperty("usersFile");
+        String model = props.getProperty("openaiModelId");
         Integer openApiTimeoutS = Integer.parseInt(props.getProperty("openApiTimeoutS"));
         Long adminChatId = (long) Integer.parseInt(props.getProperty("adminChatId"));
 
         ChatGPTBot bot = new ChatGPTBot(openaiApiKey, telegramBotToken, telegramBotName,
-                usersFile, adminChatId, openApiTimeoutS);
+                usersFile, adminChatId, openApiTimeoutS, model);
         TelegramBotsApi telegramBotsApi = new TelegramBotsApi(DefaultBotSession.class);
         try {
             telegramBotsApi.registerBot(bot);
