@@ -1,5 +1,7 @@
 # chatgpt-bot
 
+Warning! Right now project is outdated!
+
 The application allows to use a Telegram bot to redirect requests to ChatGpt.
 
 An administrator has unlimited access and can control users who can also access this bot.
